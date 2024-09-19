@@ -1,0 +1,274 @@
+
+Downloading Source
+####################
+repo init -u https://github.com/TinkerBoard2-Android/manifest.git -b android11-rk3399 -m tinker_board_2-android11-2.0.1.xml
+repo sync
+
+Building U-Boot
+####################
+source build/envsetup.sh
+lunch WW_Tinker_Board_2-userdebug
+./build.sh -U
+
+Building Kernel
+######################
+source build/envsetup.sh
+lunch WW_Tinker_Board_2-userdebug
+./build.sh -K
+
+Building Android
+#######################
+source build/envsetup.sh
+lunch WW_Tinker_Board_2-userdebug
+./build.sh -Au -J 4
+
+Building Complete Image
+############################
+source build/envsetup.sh
+lunch WW_Tinker_Board_2-userdebug
+./build.sh -UKAu -J 4
+
+Installing ADB
+################
+sudo apt-get install adb
+
+ADB Access
+################
+adb devices             -> See adb devices
+adb shell               -> Connect to shell
+adb -s 7f1c864e shell   -> When multiple devices are there, copy serial no from 'adb devices'
+$adbshell> su           -> Switch to root in adb shell
+
+Kernel Config File
+###################
+kernel/arch/arm64/configs/tinker_board_2_defconfig
+
+ADB Remote Screen
+######################
+sudo apt-get install openjdk-8-jre openjdk-8-jre-headless
+java -jar AdbRemoteScreen.jar
+java -jar AdbRemoteScreen.jar /usr/bin/adb  (to specify what adb to use when launching)
+
+Add fastboot support for host PC
+###################################
+In host PC, create udev rules:
+sudo nano /etc/udev/rules.d/51-android.rules
+with content:
+SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", MODE="0666", GROUP="plugdev"
+Restart udev:
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+Go into fastboot mode
+#########################
+adb reboot bootloader
+
+Fastboot commands
+############################
+fastboot devices                                > See available devices in fastboot mode
+fastboot erase <partition_name>                 > Erase a partition
+fastboot flash <partition_name> <image_file>    > Flash a partition
+fastboot reboot                                 > Reboot into ADB mode
+fastboot continue                               > Continue into ADB mode
+
+Check Error log
+#################
+cat out/error.log
+
+Important Directories & Files
+###############################
+
+Board & device configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+device/asus/tinker_board_2/WW_Tinker_Board_2/WW_Tinker_Board_2.mk   > Main Android configuration file
+device/asus/tinker_board_2/WW_Tinker_Board_2/BoardConfig.mk         > Board configuration, kernel cmdline
+device/asus/tinker_board_2/device.mk                                > Board configuration
+device/rockchip/common/device.mk                                    > Board configuration
+device/asus/tinker_board_2/fstab.rk30board*                         > Fstab file
+
+SELinux Policy configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+device/asus/tinker_board_2/sepolicy
+device/rockchip/common/sepolicy
+
+Init scripts
+^^^^^^^^^^^^^^^^^^
+device/asus/tinker_board_2/init.tinker_board_2.rc
+device/asus/tinker_board_2/init.rk3399.rc
+device/asus/tinker_board_2/init.rk3399.usb.rc
+system/core/rootdir/init.rc
+system/core/rootdir/*
+
+Device tree
+^^^^^^^^^^^^^^^^^^^^
+kernel/arch/arm64/boot/dts/rockchip/rk3399-tinker-board-2.dts
+kernel/arch/arm64/boot/dts/rockchip/rk3399-tinker-board-2.dtsi
+kernel/arch/arm64/boot/dts/rockchip/rk3399.dtsi
+kernel/arch/arm64/boot/dts/rockchip/rk3399-opp.dtsi
+kernel/arch/arm64/boot/dts/rockchip/rk3399-vop-clk-set.dtsi
+
+Kernel config
+^^^^^^^^^^^^^^^^^^
+kernel/arch/arm64/configs/tinker_board_2_defconfig
+
+Android Framework Customization
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+device/asus/tinker_board_2/overlay
+
+Build outputs
+^^^^^^^^^^^^^^^^^^^^^
+rockdev/
+
+System Properties
+#######################
+adb shell getprop
+adb shell getprop | grep <search_term>
+adb shell setprop <prop> <value>
+
+Android.bp examples under external/ for integrating Linux apps & libs
+########################################################################
+ethtool, iputils, giflib    -> Plain C/C++ application binary examples
+iptables                    -> GNU Autotools example
+curl                        -> CMakeLists.txt example
+
+Android Init Language Doc
+##########################
+
+https://android.googlesource.com/platform/system/core/+/master/init/README.md
+
+Enable SELinux enforcing mode
+##################################
+BOARD_SELINUX_ENFORCING = true
+
+Generate AIDL API for a service
+#####################################
+
+Create following folders with .aidl files:
+
+Have version 1 in Android.bp
+
+aidl_api/example.service.api/1
+and
+interfaces/example/service/api
+
+source build/envsetup.sh
+lunch WW_Tinker_Board_2-userdebug
+m example.service.api-update-api
+m example.service.api-freeze-api
+./build.sh -Au
+
+Remove version 1 from Android.bp and remove aidl_api/1
+
+Add AIDL interface to manifest
+#######################################
+
+Create device/udemy_mozcelikors/manifests/framework_compatibility_matrix.xml, add:
+
+	<compatibility-matrix version="1.0" type="framework">
+		<hal format="aidl" optional="true">
+			<name>example.service.api</name>
+			<interface>
+				<name>IExampleService</name>
+				<instance>default</instance>
+			</interface>
+		</hal>
+	</compatibility-matrix>
+
+To your device makefile (device/udemy_mozcelikors/changes_udemy_mozcelikors.mk):
+
+	DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += device/udemy_mozcelikors/manifests/framework_compatibility_matrix.xml
+
+To device/asus/tinker_board_2/manifest.xml, add:
+
+	<hal format="aidl">
+    	<name>example.service.api</name>
+		<fqname>IExampleService/default</fqname>
+	</hal>
+
+Logcat Problem Fix
+#############################
+
+In device/asus/tinker_board_2, comment DMClient:
+
+#PRODUCT_PACKAGES += \
+#    DMClient
+
+Setting Up CTS
+#####################
+Download CTS from https://source.android.com/docs/compatibility/cts/downloads
+sudo apt-get install aapt openjdk-11-jre openjdk-11-jdk
+
+Running CTS
+#####################
+./cts-tradefed
+run cts
+or
+run cts --include-filter "test name"
+
+Some Important ADB Commands
+#############################
+adb install MyApp.apk            -> Install application using ADB
+adb pull /data/somefile .         -> Pull some file to your PC
+adb push somefile /data           -> Push some file to Android device
+adb reboot recovery               -> Erase userdata partition, similar to factory reset
+adb shell pm list packages -f     -> Application/package list
+adb shell pm list users           -> User list
+adb shell pm list features        -> Android feature list
+adb shell dumpsys display                -> Dump display device information
+adb shell dumpsys activity broadcasts    -> See all broadcast messages
+adb shell lshal                   -> List running HAL services (HIDLs)
+adb pull /data/tombstones/ .      -> Get application crash logs
+adb logcat *:E                    -> Display all messages with Error loglevel
+
+More example dumpsys commands
+##################################
+
+adb shell dumpsys SurfaceFlinger
+adb shell dumpsys accessibility
+adb shell dumpsys account
+adb shell dumpsys activity
+adb shell dumpsys alarm
+adb shell dumpsys appwidget
+adb shell dumpsys audio
+adb shell dumpsys backup
+adb shell dumpsys battery
+adb shell dumpsys batteryinfo
+adb shell dumpsys clipboard
+adb shell dumpsys connectivity
+adb shell dumpsys content
+adb shell dumpsys cpuinfo
+adb shell dumpsys device_policy
+adb shell dumpsys devicestoragemonitor
+adb shell dumpsys diskstats
+adb shell dumpsys dropbox
+adb shell dumpsys entropy
+adb shell dumpsys hardware
+adb shell dumpsys input_method
+adb shell dumpsys iphonesubinfo
+adb shell dumpsys isms
+adb shell dumpsys location
+adb shell dumpsys media.audio_flinger
+adb shell dumpsys media.audio_policy
+adb shell dumpsys media.player
+adb shell dumpsys meminfo
+adb shell dumpsys mount
+adb shell dumpsys netstat
+adb shell dumpsys network_management
+adb shell dumpsys notification
+adb shell dumpsys package
+adb shell dumpsys permission
+adb shell dumpsys phone
+adb shell dumpsys power
+adb shell dumpsys reboot
+adb shell dumpsys screenshot
+adb shell dumpsys search
+adb shell dumpsys sensor
+adb shell dumpsys simphonebook
+adb shell dumpsys statusbar
+adb shell dumpsys telephony.registry
+adb shell dumpsys throttle
+adb shell dumpsys usagestats
+adb shell dumpsys vibrator
+adb shell dumpsys wallpaper
+adb shell dumpsys wifif
+adb shell dumpsys window
